@@ -23,15 +23,17 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
+# Install production dependencies
 FROM base AS dependencies
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Install Playwright browsers
 RUN npx playwright install --with-deps chromium firefox webkit
 
 # Development stage
-FROM dependencies AS development
+FROM base AS development
+COPY package*.json ./
+COPY tsconfig.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
