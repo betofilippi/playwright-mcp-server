@@ -35,6 +35,7 @@ FROM base AS development
 COPY package*.json ./
 COPY tsconfig.json ./
 RUN npm ci
+RUN npm install -g typescript
 COPY . .
 RUN npm run build
 
