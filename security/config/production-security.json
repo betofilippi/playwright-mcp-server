@@ -1,0 +1,421 @@
+{
+  "security": {
+    "authentication": {
+      "jwtSecret": "${JWT_SECRET}",
+      "jwtExpiresIn": "1h",
+      "refreshTokenExpiresIn": "7d",
+      "bcryptRounds": 12,
+      "requireAuth": true,
+      "allowedOrigins": [
+        "https://app.yourcompany.com",
+        "https://admin.yourcompany.com"
+      ],
+      "maxRequestSize": "10mb",
+      "sessionTimeout": 3600000,
+      "maxConcurrentSessions": 5,
+      "passwordPolicy": {
+        "minLength": 12,
+        "requireUppercase": true,
+        "requireLowercase": true,
+        "requireNumbers": true,
+        "requireSpecialChars": true,
+        "preventCommonPasswords": true,
+        "preventReuse": 5
+      }
+    },
+    "oauth2": {
+      "enabled": true,
+      "authorizationEndpoint": "${OAUTH2_AUTH_URL}",
+      "tokenEndpoint": "${OAUTH2_TOKEN_URL}",
+      "clientId": "${OAUTH2_CLIENT_ID}",
+      "clientSecret": "${OAUTH2_CLIENT_SECRET}",
+      "redirectUri": "${OAUTH2_REDIRECT_URI}",
+      "scopes": [
+        "openid",
+        "profile",
+        "email",
+        "playwright-mcp:read",
+        "playwright-mcp:execute"
+      ],
+      "pkceRequired": true,
+      "validateIssuer": true,
+      "validateAudience": true,
+      "clockTolerance": 30
+    },
+    "mfa": {
+      "enabled": true,
+      "methods": ["totp", "email"],
+      "gracePeriod": 300,
+      "backupCodes": {
+        "enabled": true,
+        "count": 10
+      },
+      "totpSettings": {
+        "issuer": "Playwright MCP Server",
+        "algorithm": "SHA256",
+        "digits": 6,
+        "period": 30,
+        "window": 2
+      }
+    },
+    "rateLimit": {
+      "redis": {
+        "enabled": true,
+        "url": "${REDIS_URL}",
+        "keyPrefix": "rl:",
+        "maxRetries": 3
+      },
+      "global": {
+        "windowMs": 900000,
+        "maxRequests": 10000,
+        "burst": 100,
+        "skipSuccessfulRequests": false,
+        "skipFailedRequests": false
+      },
+      "perUser": {
+        "windowMs": 3600000,
+        "maxRequests": 1000,
+        "burst": 50
+      },
+      "perIP": {
+        "windowMs": 900000,
+        "maxRequests": 500,
+        "burst": 25
+      },
+      "perTool": {
+        "browser_launch": {
+          "requests": 10,
+          "window": 60,
+          "priority": 1
+        },
+        "browser_force_close_all": {
+          "requests": 2,
+          "window": 300,
+          "priority": 1
+        },
+        "execute_javascript_unsafe": {
+          "requests": 5,
+          "window": 60,
+          "priority": 1
+        },
+        "page_screenshot_full": {
+          "requests": 30,
+          "window": 60,
+          "priority": 2
+        },
+        "page_pdf_generate": {
+          "requests": 20,
+          "window": 60,
+          "priority": 2
+        },
+        "network_har_export": {
+          "requests": 10,
+          "window": 60,
+          "priority": 2
+        },
+        "element_click": {
+          "requests": 200,
+          "window": 60,
+          "priority": 3
+        },
+        "element_fill": {
+          "requests": 200,
+          "window": 60,
+          "priority": 3
+        },
+        "page_navigate": {
+          "requests": 100,
+          "window": 60,
+          "priority": 3
+        }
+      },
+      "adaptive": {
+        "enabled": true,
+        "healthThreshold": 0.8,
+        "scalingFactor": 0.5,
+        "monitoringInterval": 30000
+      }
+    },
+    "threatDetection": {
+      "enabled": true,
+      "riskThreshold": 0.6,
+      "blockThreshold": 0.8,
+      "challengeThreshold": 0.7,
+      "anomalyWindow": 300000,
+      "ipWhitelist": [],
+      "userAgentWhitelist": [],
+      "geoBlocking": {
+        "enabled": false,
+        "allowedCountries": [],
+        "blockedCountries": []
+      },
+      "ml": {
+        "enabled": false,
+        "modelEndpoint": "${ML_MODEL_ENDPOINT}",
+        "confidence": 0.8
+      }
+    },
+    "inputValidation": {
+      "maxStringLength": 50000,
+      "maxArrayLength": 1000,
+      "maxObjectDepth": 10,
+      "sanitizeInput": true,
+      "stripHtml": true,
+      "normalizeUnicode": true,
+      "blacklistPatterns": [
+        "eval\\s*\\(",
+        "Function\\s*\\(",
+        "document\\.write",
+        "innerHTML\\s*=",
+        "setTimeout\\s*\\([^)]*string",
+        "setInterval\\s*\\([^)]*string"
+      ]
+    },
+    "encryption": {
+      "atRest": {
+        "enabled": true,
+        "algorithm": "AES-256-GCM",
+        "keyRotationDays": 90
+      },
+      "inTransit": {
+        "tls": {
+          "minVersion": "1.3",
+          "cipherSuites": [
+            "TLS_AES_256_GCM_SHA384",
+            "TLS_CHACHA20_POLY1305_SHA256",
+            "TLS_AES_128_GCM_SHA256"
+          ],
+          "preferServerCipherSuites": true
+        },
+        "hsts": {
+          "enabled": true,
+          "maxAge": 31536000,
+          "includeSubDomains": true,
+          "preload": true
+        }
+      }
+    },
+    "audit": {
+      "enabled": true,
+      "level": "comprehensive",
+      "destinations": [
+        {
+          "type": "file",
+          "path": "/app/logs/audit.log",
+          "maxSize": "100MB",
+          "maxFiles": 10,
+          "compress": true
+        },
+        {
+          "type": "elasticsearch",
+          "url": "${ELASTICSEARCH_URL}",
+          "index": "playwright-mcp-audit",
+          "auth": {
+            "username": "${ELASTICSEARCH_USER}",
+            "password": "${ELASTICSEARCH_PASSWORD}"
+          }
+        },
+        {
+          "type": "syslog",
+          "host": "${SYSLOG_HOST}",
+          "port": 514,
+          "facility": "local0",
+          "protocol": "tcp"
+        }
+      ],
+      "retention": {
+        "securityEvents": 2555,
+        "toolExecutions": 1095,
+        "authenticationLogs": 1825,
+        "complianceLogs": 2555
+      },
+      "realTimeAlerts": {
+        "enabled": true,
+        "channels": [
+          {
+            "type": "webhook",
+            "url": "${SECURITY_WEBHOOK_URL}",
+            "secret": "${WEBHOOK_SECRET}",
+            "events": ["THREAT_DETECTED", "PRIVILEGE_ESCALATION"]
+          },
+          {
+            "type": "email",
+            "smtp": {
+              "host": "${SMTP_HOST}",
+              "port": 587,
+              "secure": true,
+              "auth": {
+                "user": "${SMTP_USER}",
+                "pass": "${SMTP_PASS}"
+              }
+            },
+            "to": ["security@yourcompany.com", "ciso@yourcompany.com"],
+            "events": ["PRIVILEGE_ESCALATION", "DATA_BREACH"]
+          }
+        ]
+      }
+    },
+    "compliance": {
+      "gdpr": {
+        "enabled": true,
+        "dataRetentionDays": 1095,
+        "anonymizationDelay": 30,
+        "consentRequired": true,
+        "rightToErasure": true,
+        "dataPortability": true
+      },
+      "sox": {
+        "enabled": true,
+        "accessLogging": true,
+        "changeManagement": true,
+        "segregationOfDuties": true
+      },
+      "pci": {
+        "enabled": false,
+        "tokenization": false,
+        "encryption": false,
+        "networkSegmentation": false
+      },
+      "hipaa": {
+        "enabled": false,
+        "encryption": false,
+        "accessControls": false,
+        "auditLogs": false
+      }
+    },
+    "headers": {
+      "contentSecurityPolicy": {
+        "enabled": true,
+        "policy": {
+          "default-src": ["'self'"],
+          "script-src": ["'self'", "'unsafe-inline'"],
+          "style-src": ["'self'", "'unsafe-inline'"],
+          "img-src": ["'self'", "data:", "https:"],
+          "connect-src": ["'self'", "wss:", "https:"],
+          "font-src": ["'self'"],
+          "object-src": ["'none'"],
+          "base-uri": ["'self'"],
+          "frame-ancestors": ["'none'"],
+          "form-action": ["'self'"],
+          "upgrade-insecure-requests": []
+        }
+      },
+      "additionalHeaders": {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-XSS-Protection": "1; mode=block",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+        "Cross-Origin-Embedder-Policy": "require-corp",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Resource-Policy": "same-site"
+      }
+    }
+  },
+  "browser": {
+    "security": {
+      "sandboxing": {
+        "enabled": true,
+        "strictMode": true,
+        "isolateOrigins": true,
+        "siteIsolation": true
+      },
+      "permissions": {
+        "geolocation": false,
+        "notifications": false,
+        "camera": false,
+        "microphone": false,
+        "midi": false,
+        "clipboard": false,
+        "paymentHandler": false,
+        "backgroundSync": false,
+        "persistentStorage": false
+      },
+      "contentBlocking": {
+        "ads": true,
+        "trackers": true,
+        "cryptominers": true,
+        "fingerprinting": true,
+        "socialTracking": true
+      },
+      "networkFiltering": {
+        "enabled": true,
+        "blockPrivateNetworks": true,
+        "blockLocalhost": true,
+        "allowedDomains": [],
+        "blockedDomains": [
+          "malware.com",
+          "phishing-site.com"
+        ],
+        "blockDataUrls": true,
+        "blockJavaScriptUrls": true
+      }
+    },
+    "resourceLimits": {
+      "maxMemoryPerBrowser": "2GB",
+      "maxCpuPerBrowser": "2",
+      "maxDiskUsage": "10GB",
+      "maxBrowsers": 10,
+      "maxPagesPerBrowser": 20,
+      "maxContextsPerBrowser": 10,
+      "timeoutLimits": {
+        "navigationTimeout": 30000,
+        "actionTimeout": 15000,
+        "evaluateTimeout": 10000
+      }
+    }
+  },
+  "monitoring": {
+    "metrics": {
+      "enabled": true,
+      "endpoint": "/metrics",
+      "authentication": true,
+      "interval": 15000
+    },
+    "healthChecks": {
+      "enabled": true,
+      "endpoint": "/health",
+      "detailed": false,
+      "timeout": 5000
+    },
+    "alerts": {
+      "enabled": true,
+      "thresholds": {
+        "cpuUsage": 80,
+        "memoryUsage": 85,
+        "diskUsage": 90,
+        "errorRate": 5,
+        "responseTime": 5000,
+        "authFailureRate": 10,
+        "rateLimitHitRate": 50
+      }
+    }
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "timestamp": true,
+    "colorize": false,
+    "maxSize": "100MB",
+    "maxFiles": 10,
+    "compress": true,
+    "sensitiveFields": [
+      "password",
+      "token",
+      "secret",
+      "key",
+      "authorization",
+      "cookie"
+    ],
+    "destinations": [
+      {
+        "type": "file",
+        "filename": "/app/logs/application.log"
+      },
+      {
+        "type": "console",
+        "level": "error"
+      }
+    ]
+  }
+}

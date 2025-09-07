@@ -1,0 +1,91 @@
+{
+  "mcpClients": {
+    "playwright": {
+      "command": "https://localhost:3001/mcp/sse"
+    }
+  },
+  
+  "notes": {
+    "usage_instructions": [
+      "1. Generate SSL certificate: npm run generate-cert",
+      "2. Start the HTTPS server: npm run https-server",  
+      "3. Server will be running on https://localhost:3001",
+      "4. The SSE endpoint for ChatGPT Desktop is: https://localhost:3001/mcp/sse",
+      "5. Accept the self-signed certificate in your browser first",
+      "6. Copy the 'mcpClients' section above to your ChatGPT Desktop settings",
+      "7. ChatGPT Desktop will connect to the HTTPS + SSE endpoint"
+    ],
+    
+    "server_endpoints": {
+      "root": "https://localhost:3001/ - Server information and status page",
+      "sse": "https://localhost:3001/mcp/sse - ChatGPT Desktop SSE endpoint",
+      "jsonrpc": "https://localhost:3001/mcp/jsonrpc - Direct JSON-RPC endpoint", 
+      "status": "https://localhost:3001/status - Server status and metrics",
+      "health": "https://localhost:3001/health - Health check endpoint"
+    },
+    
+    "chatgpt_desktop_format": {
+      "description": "ChatGPT Desktop uses 'mcpClients' with HTTPS URLs, not executable commands",
+      "format": {
+        "mcpClients": {
+          "server-name": {
+            "command": "https://host:port/mcp/sse"
+          }
+        }
+      }
+    },
+    
+    "port_configuration": {
+      "default_port": 3001,
+      "environment_variable": "PORT",
+      "change_port": "Set PORT environment variable or edit npm script",
+      "example": "PORT=3002 npm run https-server"
+    },
+    
+    "tools_available": [
+      "8 Browser Management Tools (launch Chrome/Firefox/Safari, manage contexts)",
+      "10 Page Navigation Tools (navigate, reload, screenshots, content extraction)",
+      "6 Element Interaction Tools (click, fill, type, hover, wait for elements)",
+      "Total: 24+ Playwright automation tools"
+    ],
+    
+    "transport_details": {
+      "protocol": "HTTPS + Server-Sent Events (SSE)",
+      "mcp_version": "2024-11-05",
+      "json_rpc": "2.0", 
+      "compatible_with": "ChatGPT Desktop (Peekaboo client)",
+      "ssl_requirements": "Self-signed or valid SSL certificate required"
+    },
+    
+    "security_features": [
+      "HTTPS/TLS encryption for all communications",
+      "Self-signed SSL certificate generation",
+      "Rate limiting (100 requests per minute by default)", 
+      "CORS support for cross-origin requests",
+      "Connection management and cleanup",
+      "Request size limits (10MB)",
+      "Error handling and logging"
+    ],
+
+    "troubleshooting": {
+      "server_not_starting": [
+        "Check if port 3001 is available",
+        "Ensure Node.js is installed and TypeScript compiled",
+        "Run 'npm install' and 'npm run build'"
+      ],
+      "chatgpt_desktop_not_connecting": [
+        "Verify the HTTPS server is running on localhost:3001",
+        "Check that the endpoint URL is exactly: https://localhost:3001/mcp/sse",
+        "Accept the self-signed certificate in your browser first by visiting https://localhost:3001",
+        "Ensure ChatGPT Desktop configuration uses 'mcpClients' format",
+        "Check browser network tab for SSL/TLS connection errors",
+        "Verify certificate is generated in certs/ directory"
+      ],
+      "tools_not_working": [
+        "Verify Playwright is installed: npm install playwright",
+        "Check server logs for initialization errors",
+        "Ensure browsers are available: npx playwright install"
+      ]
+    }
+  }
+}

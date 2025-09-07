@@ -1,0 +1,152 @@
+# Multi-stage security-hardened Dockerfile for Playwright MCP Server
+# Implements security best practices and minimal attack surface
+
+# Stage 1: Build dependencies in isolated environment
+FROM node:18-alpine AS dependencies
+LABEL stage=dependencies
+
+# Security: Create non-root user early
+RUN addgroup -g 1001 -S playwright && \
+    adduser -S playwright -u 1001 -G playwright
+
+# Security: Update packages and install security updates
+RUN apk update && apk upgrade && \
+    apk add --no-cache \
+    dumb-init \
+    ca-certificates \
+    tzdata && \
+    rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Copy dependency files
+COPY package*.json ./
+COPY yarn.lock* ./
+
+# Security: Install dependencies with security settings
+RUN npm ci --only=production --ignore-scripts --no-audit --no-fund && \
+    npm cache clean --force
+
+# Install Playwright browsers with security constraints
+RUN npx playwright install --with-deps chromium firefox webkit && \
+    rm -rf ~/.cache/
+
+# Stage 2: Build application
+FROM node:18-alpine AS builder
+LABEL stage=builder
+
+WORKDIR /app
+
+# Copy source and dependencies
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY . .
+
+# Build TypeScript application
+RUN npm run build && \
+    npm prune --production
+
+# Stage 3: Runtime container with security hardening
+FROM node:18-alpine AS runtime
+
+# Security labels for compliance and scanning
+LABEL \
+    org.opencontainers.image.title="Playwright MCP Server" \
+    org.opencontainers.image.description="Enterprise-grade MCP server for browser automation" \
+    org.opencontainers.image.vendor="Your Organization" \
+    org.opencontainers.image.version="1.0.0" \
+    org.opencontainers.image.created="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+    security.scan.enabled="true" \
+    security.non-root="true" \
+    security.read-only="true" \
+    security.capabilities.drop="ALL" \
+    security.seccomp="runtime/default"
+
+# Security: Install security updates and minimal dependencies
+RUN apk update && apk upgrade && \
+    apk add --no-cache \
+    dumb-init \
+    ca-certificates \
+    tzdata \
+    tini && \
+    rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
+
+# Security: Create non-root user with minimal privileges
+RUN addgroup -g 1001 -S playwright && \
+    adduser -S playwright -u 1001 -G playwright -s /sbin/nologin
+
+# Security: Create secure directory structure
+RUN mkdir -p /app /app/logs /app/temp /app/data && \
+    chown -R playwright:playwright /app && \
+    chmod 755 /app && \
+    chmod 750 /app/logs /app/temp /app/data
+
+# Security: Create read-only filesystem structure
+WORKDIR /app
+
+# Copy application files with proper ownership
+COPY --from=builder --chown=playwright:playwright /app/dist ./dist
+COPY --from=builder --chown=playwright:playwright /app/node_modules ./node_modules
+COPY --from=builder --chown=playwright:playwright /app/package*.json ./
+COPY --chown=playwright:playwright security/config/production.json ./config/
+
+# Copy Playwright browsers
+COPY --from=dependencies --chown=playwright:playwright /root/.cache/ms-playwright /home/playwright/.cache/ms-playwright
+
+# Security: Remove package managers and unnecessary tools
+RUN npm uninstall -g npm && \
+    apk del --no-cache \
+    alpine-keys \
+    apk-tools && \
+    rm -rf \
+    /var/cache/apk/* \
+    /tmp/* \
+    /var/tmp/* \
+    /usr/local/bin/npm \
+    /usr/local/lib/node_modules/npm \
+    /root/.npm \
+    /home/playwright/.npm
+
+# Security: Set secure file permissions
+RUN find /app -type f -exec chmod 644 {} \; && \
+    find /app -type d -exec chmod 755 {} \; && \
+    chmod 755 /app/dist/index.js
+
+# Security: Create volumes for writable data
+VOLUME ["/app/logs", "/app/temp", "/app/data"]
+
+# Security: Switch to non-root user
+USER playwright:playwright
+
+# Security: Set secure environment variables
+ENV NODE_ENV=production \
+    NODE_OPTIONS="--max-old-space-size=2048 --enable-source-maps" \
+    PLAYWRIGHT_BROWSERS_PATH="/home/playwright/.cache/ms-playwright" \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    HOME="/home/playwright" \
+    USER="playwright" \
+    UID=1001 \
+    GID=1001
+
+# Expose only necessary port
+EXPOSE 3000
+
+# Health check for container orchestration
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD node -e "const http = require('http'); \
+    const req = http.request({hostname: 'localhost', port: 3000, path: '/health', timeout: 5000}, \
+    (res) => process.exit(res.statusCode === 200 ? 0 : 1)); \
+    req.on('error', () => process.exit(1)); \
+    req.end();"
+
+# Security: Use tini for proper signal handling and process reaping
+ENTRYPOINT ["tini", "--"]
+
+# Start application with security constraints
+CMD ["node", "--enable-source-maps", "--max-old-space-size=2048", "dist/index.js"]
+
+# Security: Runtime metadata
+LABEL \
+    security.runtime.user="1001:1001" \
+    security.runtime.capabilities="none" \
+    security.runtime.read-only-root="true" \
+    security.runtime.no-new-privileges="true"

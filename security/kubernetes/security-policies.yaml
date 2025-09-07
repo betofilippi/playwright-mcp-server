@@ -1,0 +1,587 @@
+# Comprehensive Kubernetes Security Policies for Playwright MCP Server
+# Implements defense-in-depth security controls
+
+---
+# Pod Security Policy
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: playwright-mcp-psp
+  namespace: playwright-mcp
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'runtime/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+spec:
+  # Security: No privileged containers
+  privileged: false
+  allowPrivilegeEscalation: false
+  
+  # Security: Drop all capabilities
+  requiredDropCapabilities:
+    - ALL
+  allowedCapabilities: []
+  defaultAddCapabilities: []
+  
+  # Security: Allowed volume types (minimal set)
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  
+  # Security: Host restrictions
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  hostPorts:
+    - min: 0
+      max: 0
+  
+  # Security: User and group constraints
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+    ranges:
+      - min: 1001
+        max: 1001
+  runAsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1001
+        max: 1001
+  supplementalGroups:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'RunAsAny'
+  
+  # Security: Filesystem restrictions
+  readOnlyRootFilesystem: true
+  allowedHostPaths: []
+  
+  # Security: SELinux
+  seLinux:
+    rule: 'RunAsAny'
+
+---
+# Network Policy - Ingress and Egress restrictions
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: playwright-mcp-netpol
+  namespace: playwright-mcp
+spec:
+  podSelector:
+    matchLabels:
+      app: playwright-mcp
+  policyTypes:
+    - Ingress
+    - Egress
+  
+  # Ingress: Only allow traffic from API Gateway
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+        - namespaceSelector:
+            matchLabels:
+              name: api-gateway
+      ports:
+        - protocol: TCP
+          port: 3000
+    
+    # Allow health checks from kube-system
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: TCP
+          port: 3000
+  
+  # Egress: Restricted outbound access
+  egress:
+    # Allow Redis access
+    - to:
+        - podSelector:
+            matchLabels:
+              app: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+        - podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    
+    # Allow HTTPS for browser operations (restricted)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+      # Note: In production, use more specific selectors
+
+---
+# Security Context Constraints (OpenShift)
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: playwright-mcp-scc
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+allowedCapabilities: []
+defaultAddCapabilities: []
+fsGroup:
+  type: RunAsAny
+readOnlyRootFilesystem: true
+requiredDropCapabilities:
+  - ALL
+runAsUser:
+  type: MustRunAsNonRoot
+seLinuxContext:
+  type: RunAsAny
+supplementalGroups:
+  type: RunAsAny
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+
+---
+# RBAC - Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: playwright-mcp-sa
+  namespace: playwright-mcp
+automountServiceAccountToken: false
+
+---
+# RBAC - Role (minimal permissions)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: playwright-mcp-role
+  namespace: playwright-mcp
+rules:
+  # Minimal permissions for pod self-monitoring
+  - apiGroups: [""]
+    resources: ["pods"]
+    resourceNames: ["playwright-mcp-*"]
+    verbs: ["get"]
+  
+  # Access to own ConfigMaps and Secrets
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    resourceNames: ["playwright-mcp-config", "playwright-mcp-secrets"]
+    verbs: ["get"]
+
+---
+# RBAC - Role Binding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: playwright-mcp-binding
+  namespace: playwright-mcp
+subjects:
+  - kind: ServiceAccount
+    name: playwright-mcp-sa
+    namespace: playwright-mcp
+roleRef:
+  kind: Role
+  name: playwright-mcp-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Resource Quotas
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: playwright-mcp-quota
+  namespace: playwright-mcp
+spec:
+  hard:
+    # Compute resources
+    requests.cpu: "4"
+    requests.memory: "8Gi"
+    limits.cpu: "8"
+    limits.memory: "16Gi"
+    
+    # Storage
+    requests.storage: "50Gi"
+    persistentvolumeclaims: "10"
+    
+    # Object counts
+    pods: "20"
+    services: "5"
+    secrets: "10"
+    configmaps: "10"
+    
+    # Security
+    count/podsecuritypolicies: "1"
+
+---
+# Limit Ranges
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: playwright-mcp-limits
+  namespace: playwright-mcp
+spec:
+  limits:
+    # Container limits
+    - type: Container
+      default:
+        cpu: "1"
+        memory: "2Gi"
+        ephemeral-storage: "10Gi"
+      defaultRequest:
+        cpu: "500m"
+        memory: "1Gi"
+        ephemeral-storage: "2Gi"
+      max:
+        cpu: "4"
+        memory: "8Gi"
+        ephemeral-storage: "50Gi"
+      min:
+        cpu: "100m"
+        memory: "256Mi"
+        ephemeral-storage: "1Gi"
+    
+    # Pod limits
+    - type: Pod
+      max:
+        cpu: "4"
+        memory: "8Gi"
+        ephemeral-storage: "50Gi"
+      min:
+        cpu: "100m"
+        memory: "256Mi"
+        ephemeral-storage: "1Gi"
+
+---
+# Gatekeeper Constraint Template - Deny Privileged Containers
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: denyprivilegedcontainers
+spec:
+  crd:
+    spec:
+      names:
+        kind: DenyPrivilegedContainers
+      validation:
+        openAPIV3Schema:
+          type: object
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package denyprivileged
+        
+        violation[{"msg": msg}] {
+          input.review.object.spec.securityContext.privileged
+          msg := "Privileged containers are not allowed"
+        }
+        
+        violation[{"msg": msg}] {
+          input.review.object.spec.containers[_].securityContext.privileged
+          msg := "Privileged containers are not allowed"
+        }
+
+---
+# Gatekeeper Constraint - Apply Privileged Container Policy
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: DenyPrivilegedContainers
+metadata:
+  name: deny-privileged-containers
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces: ["playwright-mcp"]
+
+---
+# Gatekeeper Constraint Template - Required Security Context
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: requiresecuritycontext
+spec:
+  crd:
+    spec:
+      names:
+        kind: RequireSecurityContext
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            runAsUser:
+              type: integer
+            runAsGroup:
+              type: integer
+            fsGroup:
+              type: integer
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package requiresecuritycontext
+        
+        violation[{"msg": msg}] {
+          not input.review.object.spec.securityContext.runAsUser
+          msg := "runAsUser is required in securityContext"
+        }
+        
+        violation[{"msg": msg}] {
+          input.review.object.spec.securityContext.runAsUser != input.parameters.runAsUser
+          msg := sprintf("runAsUser must be %v", [input.parameters.runAsUser])
+        }
+        
+        violation[{"msg": msg}] {
+          not input.review.object.spec.securityContext.runAsNonRoot
+          msg := "runAsNonRoot must be true"
+        }
+        
+        violation[{"msg": msg}] {
+          not input.review.object.spec.securityContext.readOnlyRootFilesystem
+          msg := "readOnlyRootFilesystem must be true"
+        }
+
+---
+# Gatekeeper Constraint - Apply Security Context Requirements
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RequireSecurityContext
+metadata:
+  name: require-security-context
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces: ["playwright-mcp"]
+  parameters:
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: playwright-mcp-pdb
+  namespace: playwright-mcp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: playwright-mcp
+
+---
+# Falco Security Rules ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: playwright-mcp-falco-rules
+  namespace: playwright-mcp
+data:
+  playwright_security_rules.yaml: |
+    - rule: Detect Privilege Escalation in Playwright MCP
+      desc: Alert on privilege escalation attempts
+      condition: >
+        k8s_audit and
+        ka.target.namespace = "playwright-mcp" and
+        ka.verb = "create" and
+        ka.target.resource = "pods" and
+        ka.request_object contains "privileged: true"
+      output: >
+        Privilege escalation attempt detected in Playwright MCP
+        (user=%ka.user.name verb=%ka.verb 
+         resource=%ka.target.resource reason=%ka.response_reason)
+      priority: CRITICAL
+      tags: [k8s_audit, privilege_escalation]
+    
+    - rule: Detect Suspicious Network Activity
+      desc: Alert on unexpected network connections from Playwright MCP pods
+      condition: >
+        outbound and
+        k8s.ns.name = "playwright-mcp" and
+        not fd.sip in (redis_servers) and
+        not fd.sport in (80, 443, 53) and
+        not proc.name in (node, chromium, firefox, webkit)
+      output: >
+        Suspicious outbound network connection from Playwright MCP
+        (pod=%k8s.pod.name dest=%fd.rip:%fd.rport proc=%proc.name)
+      priority: HIGH
+      tags: [network, suspicious]
+    
+    - rule: Detect File System Modifications
+      desc: Alert on unauthorized file system modifications
+      condition: >
+        open_write and
+        k8s.ns.name = "playwright-mcp" and
+        not fd.name startswith "/app/logs" and
+        not fd.name startswith "/app/temp" and
+        not fd.name startswith "/app/data"
+      output: >
+        Unauthorized file modification in Playwright MCP
+        (pod=%k8s.pod.name file=%fd.name proc=%proc.name)
+      priority: HIGH
+      tags: [filesystem, unauthorized]
+
+---
+# Istio Security Policy - mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: playwright-mcp-mtls
+  namespace: playwright-mcp
+spec:
+  selector:
+    matchLabels:
+      app: playwright-mcp
+  mtls:
+    mode: STRICT
+
+---
+# Istio Authorization Policy
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: playwright-mcp-authz
+  namespace: playwright-mcp
+spec:
+  selector:
+    matchLabels:
+      app: playwright-mcp
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/api-gateway/sa/api-gateway-sa"]
+      to:
+        - operation:
+            methods: ["POST", "GET"]
+            paths: ["/mcp/*", "/health", "/metrics"]
+      when:
+        - key: source.namespace
+          values: ["api-gateway"]
+
+---
+# Admission Controller Webhook Configuration
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionWebhook
+metadata:
+  name: playwright-mcp-security-webhook
+webhooks:
+  - name: security.playwright-mcp.local
+    clientConfig:
+      service:
+        name: playwright-security-webhook
+        namespace: playwright-mcp
+        path: "/validate"
+    rules:
+      - operations: ["CREATE", "UPDATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]
+        namespaceSelector:
+          matchLabels:
+            name: playwright-mcp
+    admissionReviewVersions: ["v1", "v1beta1"]
+    sideEffects: None
+    failurePolicy: Fail
+
+---
+# Monitoring and Alerting - ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: playwright-mcp-security-metrics
+  namespace: playwright-mcp
+  labels:
+    app: playwright-mcp
+spec:
+  selector:
+    matchLabels:
+      app: playwright-mcp
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+
+---
+# PrometheusRule for Security Alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: playwright-mcp-security-alerts
+  namespace: playwright-mcp
+spec:
+  groups:
+    - name: playwright-mcp-security
+      rules:
+        - alert: PlaywrightMCPAuthenticationFailures
+          expr: increase(playwright_mcp_auth_failures_total[5m]) > 10
+          for: 1m
+          labels:
+            severity: warning
+            component: authentication
+          annotations:
+            summary: High authentication failure rate
+            description: "{{ $value }} authentication failures in the last 5 minutes"
+        
+        - alert: PlaywrightMCPThreatDetected
+          expr: playwright_mcp_threats_detected_total > 0
+          for: 0s
+          labels:
+            severity: critical
+            component: security
+          annotations:
+            summary: Security threat detected
+            description: "Security threat detected in Playwright MCP server"
+        
+        - alert: PlaywrightMCPPrivilegeEscalation
+          expr: increase(playwright_mcp_privilege_escalation_total[1m]) > 0
+          for: 0s
+          labels:
+            severity: critical
+            component: security
+          annotations:
+            summary: Privilege escalation attempt
+            description: "Privilege escalation attempt detected"
+        
+        - alert: PlaywrightMCPHighResourceUsage
+          expr: |
+            (
+              container_memory_working_set_bytes{namespace="playwright-mcp",container="playwright-mcp"} 
+              / 
+              container_spec_memory_limit_bytes{namespace="playwright-mcp",container="playwright-mcp"}
+            ) > 0.9
+          for: 5m
+          labels:
+            severity: warning
+            component: resources
+          annotations:
+            summary: High memory usage
+            description: "Memory usage is above 90% for 5 minutes"

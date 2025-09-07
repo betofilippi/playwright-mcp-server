@@ -1,0 +1,57 @@
+{
+  "name": "playwright-mcp-server",
+  "version": "1.0.0",
+  "description": "Production-ready MCP server for Playwright browser automation",
+  "main": "dist/server-enhanced-advanced.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server-enhanced-advanced.js",
+    "dev": "tsx watch src/server-enhanced-advanced.ts",
+    "test": "jest",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "playwright",
+    "browser-automation",
+    "web-scraping",
+    "testing"
+  ],
+  "author": "MCP Playwright Server Team",
+  "license": "MIT",
+  "dependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/uuid": "^9.0.8",
+    "node-fetch": "^3.3.2",
+    "playwright": "^1.55.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.14.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.8",
+    "@types/node": "^20.10.0",
+    "@types/ws": "^8.5.8",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.55.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.1.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/playwright-mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/playwright-mcp-server/issues"
+  },
+  "homepage": "https://github.com/your-org/playwright-mcp-server#readme"
+}
