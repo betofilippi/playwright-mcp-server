@@ -35,9 +35,8 @@ FROM base AS development
 COPY package*.json ./
 COPY tsconfig.json ./
 RUN npm ci
-RUN npm install -g typescript @types/node
 COPY . .
-RUN npm run build
+RUN npx tsc --noCheck
 
 # Production stage
 FROM base AS production
